@@ -1,0 +1,41 @@
+# Environments
+.venv/
+dist/
+build/
+__pycache__/
+*.py[cod]
+
+# MediaPipe model binaries (9.4MB each). Fetched by scripts/fetch_model.sh.
+models/
+*.task
+
+# Local data: history DB, logs, generated dashboard
+data/
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# Captured frames and the calibration image store. Never commit images of the user.
+captures/
+calibration_frames/
+*.jpg
+*.jpeg
+*.png
+
+# Test fixture images are the one exception (deliberately posed, no ambient capture)
+!tests/fixtures/**/*.jpg
+!tests/fixtures/**/*.png
+
+# Secrets
+.env
+.env.local
+
+# macOS
+.DS_Store
+
+# Local project notes and OS metadata
+HANDOFF.md
+AGENTS.md
+CLAUDE.md
+.DS_Store

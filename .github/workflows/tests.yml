@@ -1,0 +1,25 @@
+name: Tests
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+      - run: uv python install 3.12
+      - run: uv sync --extra dev --locked
+      - run: uv run python -m pytest -q
+      - run: uv run python -m ruff check src tests scripts
+      - run: uv build
+      - name: Verify wheel outside checkout
+        run: |
+          temp_dir="$(mktemp -d)"
+          uv venv "$temp_dir/venv" --python 3.12
+          uv pip install --python "$temp_dir/venv/bin/python" dist/*.whl
+          cd "$temp_dir"
+          "$temp_dir/venv/bin/python" "$GITHUB_WORKSPACE/scripts/demo.py"

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stack</title>
+<style>
+  /* Stack palette: warm charcoal surfaces, sage / warm amber / terracotta as
+     the three semantic colours, and a muted blue for neutral counts. Terracotta
+     rather than alarm red on purpose: this page is read alongside a popup seen
+     many times a day, and the two have to agree. The same values drive the
+     popup themes in posture/ui/themes.py. */
+  :root { --bg:#1c1a18; --surface:#262320; --border:#3a3632; --text:#f0ece6;
+          --text2:#a39c93; --good:#7fb069; --decent:#e0a458; --poor:#c05746;
+          --info:#6b9ac4; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); padding:24px;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  h1 { font-size:26px; margin-bottom:6px; }
+  .sub { color:var(--text2); margin-bottom:28px; font-size:13px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+          gap:14px; margin-bottom:28px; }
+  .card { background:var(--surface); border:1px solid var(--border);
+          border-radius:12px; padding:18px; }
+  .card .l { color:var(--text2); font-size:11px; text-transform:uppercase;
+             letter-spacing:.5px; margin-bottom:6px; }
+  .card .v { font-size:30px; font-weight:700; }
+  .g{color:var(--good);} .y{color:var(--decent);} .r{color:var(--poor);} .b{color:var(--info);}
+  .muted { color:var(--text2); font-size:18px; font-weight:400; }
+  .card .vnote { font-size:13px; font-weight:400; color:var(--text2); line-height:1.4; }
+  .ch { background:var(--surface); border:1px solid var(--border); border-radius:12px;
+        padding:18px; margin-bottom:20px; }
+  .ch h2 { font-size:15px; margin-bottom:14px; }
+  .cw { position:relative; height:260px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border);
+       color:var(--text2); font-size:11px; text-transform:uppercase; }
+  td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border);
+       font-size:13px; vertical-align:top; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:12px;
+           font-size:11px; font-weight:700; }
+  /* Each pill is the base charcoal mixed 26% toward its semantic colour, with
+     a lightened version of that colour as the text. Every one clears 4.5:1;
+     the saturated colour used directly on the tint did not. */
+  .badge.GOOD{background:#36412d;color:#b2cba1;}
+  .badge.DECENT{background:#4f3e29;color:#e7c498;}
+  .badge.POOR{background:#472a24;color:#d69a8e;}
+  .note { color:var(--text2); font-size:12px; margin-top:10px; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<h1>Stack</h1>
+<p class="sub" id="subline"></p>
+<p class="note" id="capabilityLine"></p>
+
+<div class="grid" id="cards"></div>
+
+<div class="ch">
+  <h2>Daily posture score (0 to 100)</h2>
+  <div class="cw"><canvas id="scoreChart"></canvas></div>
+  <p class="note" id="scoreBreak" style="display:none;"></p>
+</div>
+
+<div class="ch">
+  <h2>Craniovertebral angle (degrees)</h2>
+  <div class="cw"><canvas id="cvaChart"></canvas></div>
+  <p class="note" id="cvaEmpty" style="display:none;">
+     No craniovertebral readings yet. This measurement needs a second camera
+     viewing you from the side; a front-facing camera cannot see forward head
+     posture. Everything else on this page works with one camera.</p>
+  <p class="note">Measured from the side camera: the angle from horizontal through your
+     shoulder to your ear. Higher is more upright, all the way down. A negative value
+     means your ear has dropped below your shoulder, which is the head hanging forward
+     onto the chest. Read the trend, not the absolute number: this is a raw angle from
+     an uncalibrated camera, not the clinical craniovertebral angle, so no published
+     threshold applies to it and moving the side camera shifts it more than weeks of
+     real change do. Days with no line are days with no side-derived reading. That
+     covers a side camera that was not connected, and equally a connected one that
+     produced no readable angle, for example when an ear or a shoulder was not
+     clearly visible, or when it saw you but the angle could not be measured. The
+     gap says this measurement is missing for that day; it does not say why.</p>
+</div>
+
+<div class="ch">
+  <h2>Local measurement versus Gemini</h2>
+  <div id="agreement"></div>
+  <p class="note">Counted over randomly sampled checks only, so the comparison is not
+     biased toward frames the local measurement already flagged.</p>
+</div>
+
+<div class="ch">
+  <h2>Recent checks</h2>
+  <div style="max-height:460px;overflow-y:auto;">
+    <table>
+      <thead><tr><th>When</th><th>Local</th><th>Gemini</th><th>Issue</th><th>Tip</th></tr></thead>
+      <tbody id="tbl"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>/*__CHARTJS__*/</script>
+<script>
+const DATA = __DATA_JSON__;
+
+function cell(row, text, className) {
+  const td = document.createElement('td');
+  if (className) td.className = className;
+  td.textContent = text == null || text === '' ? '-' : String(text);
+  row.appendChild(td);
+  return td;
+}
+
+// Stored ratings stay GOOD/DECENT/POOR because they are persisted and compared.
+// What a reader SEES is the same wording the popup uses: an instruction, not a
+// verdict. Keeping the two in step matters more than it looks, since this table
+// is where he checks whether a nudge he remembers was fair.
+const RATING_WORDS = {GOOD: 'Stacked', DECENT: 'Drifting', POOR: 'Reset'};
+
+function badgeCell(row, rating) {
+  const td = document.createElement('td');
+  if (rating) {
+    const span = document.createElement('span');
+    span.className = 'badge ' + rating;
+    span.textContent = RATING_WORDS[rating] || rating;
+    td.appendChild(span);
+  } else {
+    td.textContent = '-';
+  }
+  row.appendChild(td);
+}
+
+function scoreClass(v) { return v >= 75 ? 'g' : v >= 50 ? 'y' : 'r'; }
+
+function card(label, value, className, note) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  const l = document.createElement('div');
+  l.className = 'l';
+  l.textContent = label;
+  const v = document.createElement('div');
+  v.className = 'v ' + (value === null ? 'muted' : className);
+  v.textContent = value === null ? 'no data' : value;
+  div.appendChild(l); div.appendChild(v);
+  // A number whose scope differs from its heading has to carry the scope with
+  // it. The average is computed on the current baseline only when a
+  // recalibration falls in the window, and the reader is told so here rather
+  // than being left to assume the label covers everything.
+  if (note) {
+    const note_el = document.createElement('div');
+    note_el.className = 'vnote';
+    note_el.textContent = note;
+    div.appendChild(note_el);
+  }
+  return div;
+}
+
+function trendCard(trend, note) {
+  // A suppressed trend must show WHY, not just a blank "no data": the reason
+  // (not enough history yet, or a recalibration split the window) is the
+  // whole point of the amendment that computes it. A bare "no data" here
+  // would be a suppression the reader cannot tell apart from a missing chart.
+  const div = document.createElement('div');
+  div.className = 'card';
+  const l = document.createElement('div');
+  l.className = 'l';
+  l.textContent = '7-day trend';
+  div.appendChild(l);
+  if (trend === null) {
+    const note_el = document.createElement('div');
+    note_el.className = 'vnote';
+    note_el.textContent = note || 'Not enough data yet.';
+    div.appendChild(note_el);
+  } else {
+    const v = document.createElement('div');
+    v.className = 'v ' + (trend >= 0 ? 'g' : 'r');
+    v.textContent = trend >= 0 ? '+' + trend : trend;
+    div.appendChild(v);
+  }
+  return div;
+}
+
+function todayScoreCard(todayScore, todayOnOtherSetup) {
+  // Bare "no data" here would hide the same kind of gap F1 fixed for the
+  // trend: if today's checks all landed on a setup other than the dominant
+  // one, there IS data for today, just not for the setup this card reports
+  // on. Say so, rather than leaving the reader to infer it from the
+  // capability line elsewhere on the page.
+  const div = document.createElement('div');
+  div.className = 'card';
+  const l = document.createElement('div');
+  l.className = 'l';
+  l.textContent = "Today's score";
+  div.appendChild(l);
+  if (todayScore !== null) {
+    const v = document.createElement('div');
+    v.className = 'v ' + scoreClass(todayScore);
+    v.textContent = todayScore;
+    div.appendChild(v);
+  } else if (todayOnOtherSetup) {
+    const note = document.createElement('div');
+    note.className = 'vnote';
+    note.textContent = "Today's checks used a different camera setup; see the note above.";
+    div.appendChild(note);
+  } else {
+    const v = document.createElement('div');
+    v.className = 'v muted';
+    v.textContent = 'no data';
+    div.appendChild(v);
+  }
+  return div;
+}
+
+document.getElementById('subline').textContent =
+  'Generated ' + DATA.generated_at + ' · ' + DATA.total_checks_recorded +
+  ' checks recorded in the last 60 days (' + DATA.total_checks_scored +
+  ' scored across every camera setup, ' + DATA.total_checks_unscored +
+  ' without a rating)';
+
+const capabilityLine = document.getElementById('capabilityLine');
+if (DATA.capability) {
+  let capText = 'The numbers below are measured on your ' + DATA.capability +
+    ' setup, the most common one in the last 60 days.';
+  if (DATA.excluded_checks > 0) {
+    capText += ' ' + DATA.excluded_checks +
+      (DATA.excluded_checks === 1 ? ' check' : ' checks') +
+      ' from other camera setups in that window are not included in the per-setup numbers below.';
+  }
+  capabilityLine.textContent = capText;
+} else {
+  capabilityLine.textContent = 'No checks recorded yet.';
+}
+
+const cards = document.getElementById('cards');
+cards.appendChild(todayScoreCard(DATA.today_score, DATA.today_checked_on_other_setup));
+cards.appendChild(card(DATA.average_score_label, DATA.average_score,
+  DATA.average_score === null ? '' : scoreClass(DATA.average_score),
+  DATA.average_score_note));
+cards.appendChild(card('Checks on this setup', DATA.total_checks, 'b'));
+cards.appendChild(trendCard(DATA.trend, DATA.trend_note));
+
+const axis = { grid: { color: '#3a3632' }, ticks: { color: '#a39c93' } };
+
+// One dataset per baseline, each padded with nulls outside its own run. With
+// spanGaps off, Chart.js stops the stroke at a recalibration instead of
+// carrying it across, so the two runs read as two separate measurements. The
+// older run is still drawn: the history is worth seeing, it just is not on the
+// same scale as the current one.
+const SEGMENT_COLORS = ['#6b9ac4', '#e0a458', '#a68abd', '#7fb069', '#c05746'];
+const oneBaseline = DATA.daily_segments.length <= 1;
+
+new Chart(document.getElementById('scoreChart'), {
+  type: 'line',
+  data: { labels: DATA.daily_labels,
+          datasets: DATA.daily_segments.map((s, i) => ({
+            label: s.label, data: s.data,
+            borderColor: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+            backgroundColor: 'rgba(107,154,196,.12)',
+            fill: oneBaseline, tension: .3, pointRadius: 3, spanGaps: false })) },
+  options: { responsive: true, maintainAspectRatio: false,
+             scales: { y: { min: 0, max: 100, ...axis }, x: axis },
+             plugins: { legend: { display: !oneBaseline,
+                                  labels: { color: '#a39c93' } } } }
+});
+
+if (DATA.baseline_breaks.length > 0) {
+  const el = document.getElementById('scoreBreak');
+  el.textContent = 'The line stops and restarts in a new colour where the baseline was ' +
+    'recalibrated (' + DATA.baseline_breaks.join(', ') + '). A recalibration rebases ' +
+    'every score after it, so the runs either side of a gap are measured against ' +
+    'different references and are not directly comparable. Read each run on its own; ' +
+    'do not read a step across a gap as a change in your back.';
+  el.style.display = 'block';
+}
+
+if (DATA.cva.length === 0) {
+  document.getElementById('cvaEmpty').style.display = 'block';
+  document.getElementById('cvaChart').parentElement.style.display = 'none';
+}
+
+new Chart(document.getElementById('cvaChart'), {
+  type: 'line',
+  data: { labels: DATA.cva.map(d => d.date),
+          datasets: [{ label: 'CVA (degrees)', data: DATA.cva.map(d => d.cva),
+                       borderColor: '#7fb069', backgroundColor: 'rgba(127,176,105,.12)',
+                       fill: true, tension: .3, pointRadius: 3, spanGaps: false }] },
+  options: { responsive: true, maintainAspectRatio: false,
+             scales: { y: { ...axis }, x: axis },
+             plugins: { legend: { display: false } } }
+});
+
+const agreementEl = document.getElementById('agreement');
+// The rate's denominator is the sampled checks that produced a VERDICT, which
+// is not the same as the sampled checks. Saying "of N sampled checks" while N
+// counted only the successful calls dropped every API error, every model
+// outage, and every local crop refusal out of the statistic without a word on
+// the page: 20 sampled, "4 of 5" printed. The label now names the denominator
+// it actually has, and the shortfall is stated underneath with its reasons.
+const A = DATA.agreement;
+if (A.sampled === 0) {
+  const p = document.createElement('p');
+  p.className = 'note';
+  p.textContent = 'No comparison samples recorded yet.';
+  agreementEl.appendChild(p);
+} else {
+  const summary = document.createElement('p');
+  if (A.compared === 0) {
+    // No denominator at all. Printing a percentage here would be a number
+    // invented from nothing, which is the same overstatement in its purest form.
+    summary.textContent = 'No agreement rate yet: none of the ' + A.sampled +
+      ' sampled checks produced a verdict to compare against.';
+  } else {
+    summary.textContent = 'Agreement: ' + Math.round(A.rate * 100) + '% (' +
+      A.matched + ' of ' + A.compared + ' sampled checks that produced a verdict)';
+  }
+  agreementEl.appendChild(summary);
+
+  if (A.no_verdict > 0) {
+    const gap = document.createElement('p');
+    gap.className = 'note';
+    gap.textContent = A.no_verdict + ' of ' + A.sampled +
+      ' sampled checks produced no verdict, so they are not in the figure above: ' +
+      A.no_verdict_reasons.map(r => r.count + ' ' + r.reason).join(', ') +
+      '. These are not a random subset of your posture: a crop refusal tracks ' +
+      'poor detection, which tracks the postures worth comparing most.';
+    agreementEl.appendChild(gap);
+  }
+
+  if (A.compared > 0) {
+    const table = document.createElement('table');
+    const head = document.createElement('tr');
+    ['Local', 'Gemini', 'Count'].forEach(h => {
+      const th = document.createElement('th');
+      th.textContent = h;
+      head.appendChild(th);
+    });
+    table.appendChild(head);
+    A.matrix.forEach(m => {
+      const tr = document.createElement('tr');
+      cell(tr, m.local); cell(tr, m.gemini); cell(tr, m.count);
+      table.appendChild(tr);
+    });
+    agreementEl.appendChild(table);
+  }
+}
+
+const tbody = document.getElementById('tbl');
+DATA.recent.forEach(r => {
+  const tr = document.createElement('tr');
+  cell(tr, r.ts.replace('T', ' '));
+  badgeCell(tr, r.local_rating);
+  badgeCell(tr, r.gemini_rating);
+  cell(tr, r.gemini_issue || r.local_driver);
+  cell(tr, r.gemini_tip);
+  tbody.appendChild(tr);
+});
+</script>
+</body>
+</html>
