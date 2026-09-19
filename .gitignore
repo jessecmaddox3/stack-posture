@@ -23,9 +23,8 @@ calibration_frames/
 *.jpeg
 *.png
 
-# Test fixture images are the one exception (deliberately posed, no ambient capture)
-!tests/fixtures/**/*.jpg
-!tests/fixtures/**/*.png
+# Promotional artwork and synthetic screenshots are reviewed release assets.
+!docs/*.png
 
 # Secrets
 .env

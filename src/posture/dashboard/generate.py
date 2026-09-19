@@ -24,6 +24,7 @@ logger = logging.getLogger("posture")
 
 TEMPLATE_PATH = Path(__file__).parent / "template.html"
 VENDOR_PATH = Path(__file__).parent / "vendor" / "chart.umd.min.js"
+LICENSES_PATH = Path(__file__).parent / "vendor" / "LICENSES.txt"
 
 
 def _dominant_capability(scores: list[dict]) -> str | None:
@@ -270,6 +271,11 @@ def build_dashboard_data(conn) -> dict:
 
 def generate(conn, output_path: Path) -> Path:
     data = build_dashboard_data(conn)
+    return render_dashboard(data, output_path)
+
+
+def render_dashboard(data: dict, output_path: Path) -> Path:
+    """Render supplied measurements; the demo supplies wholly invented data."""
     html = TEMPLATE_PATH.read_text(encoding="utf-8")
     html = html.replace("/*__CHARTJS__*/", VENDOR_PATH.read_text(encoding="utf-8"))
     # Escape angle brackets and ampersands as \uXXXX so no HTML-looking substring
@@ -280,6 +286,9 @@ def generate(conn, output_path: Path) -> Path:
                .replace(">", "\\u003e")
                .replace("&", "\\u0026"))
     html = html.replace("__DATA_JSON__", payload)
+    # Retain the permission notices when an HTML dashboard is shared on its own.
+    html = html.replace("</body>", "<!--\n" + LICENSES_PATH.read_text(encoding="utf-8")
+                        + "\n-->\n</body>")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html, encoding="utf-8")
     logger.info("dashboard written to %s", output_path)

@@ -1,132 +1,174 @@
 # Stack
 
-> **TL;DR:** Stack is a local macOS menu bar app that measures desk posture
-> against a baseline you set. Try its offline demo with no camera, account,
-> Keychain, or network: `uv run python scripts/demo.py`.
+![Stack: a little nudge back into alignment. Local by default, your own baseline, make it yours.](docs/stack-hero.png)
+
+**A quiet posture helper for your Mac.** Set a comfortable baseline, get a gentle
+nudge when you drift, and see your patterns in a local dashboard. One camera is
+enough to start; a second side view adds more measurements.
+
+I built this for myself and my own desk. Make it your own, and feel free to
+improve mine. Hopefully it gives you a useful starting point, or at least a few
+ideas. Cheers!
+
+> **Start here:** [Download Stack for Apple Silicon Mac](https://github.com/jessecmaddox3/stack-posture/releases/latest/download/Stack.zip).
+> Unzip it and double-click **Set Up Stack.command**. No Git or coding experience
+> needed. Requires **an M1 or newer Mac running macOS 13 or newer**. This is guided
+> source installation, not a signed Mac app.
 
 [![Tests](https://github.com/jessecmaddox3/stack-posture/actions/workflows/tests.yml/badge.svg)](https://github.com/jessecmaddox3/stack-posture/actions/workflows/tests.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Stack uses MediaPipe locally to measure posture from one or two cameras. Its
-ratings are relative to a personal baseline, rather than a generic ideal. An
-optional Gemini second opinion can add coaching text and compare agreement with
-the local measurement. Gemini starts **off**, so a normal installation has no
-account requirement and does not upload frames.
+## See what you get
 
-This is an early, local-use tool, not a medical device or clinical posture
-assessment. Its measurements are heuristics for a stable desk setup. Do not use
-it to diagnose, treat, or make medical decisions.
+**Want a look before installing?** [Download the sample dashboard](https://github.com/jessecmaddox3/stack-posture/releases/latest/download/Stack-Demo.html),
+then double-click that HTML file. It opens in your browser, works offline and
+uses entirely invented measurements. It does not turn on your camera.
 
-## Try it without hardware or an account
+![Actual Stack dashboard rendered with invented measurements.](docs/dashboard-demo.png)
 
-Stack needs macOS and Python 3.12. Install [uv](https://docs.astral.sh/uv/),
-then clone the repository and run the deterministic demo:
+- **Your baseline:** measurements relative to how you choose to sit.
+- **Gentle nudges:** sustained drift triggers a reminder, with a cooldown.
+- **Local history:** charts separate camera setups and changed baselines.
+- **Flexible cameras:** front, side, or both. Cameras are released between samples.
+- **Optional AI second opinion:** Gemini comparison and coaching, off by default.
+
+The header is generated artwork. The screenshot is the real dashboard with
+synthetic data. This is a personal experiment with camera-based heuristics, not
+a medical assessment or a validated measure of health.
+
+## Set it up, step by step
+
+1. **Download and unzip [Stack.zip](https://github.com/jessecmaddox3/stack-posture/releases/latest/download/Stack.zip).**
+   Move the Stack folder somewhere you will keep it, such as your Applications folder.
+2. **Double-click `Set Up Stack.command`.** A Terminal window opens and explains
+   what happens next. If needed, it offers to install the small [uv dependency
+   manager](https://docs.astral.sh/uv/getting-started/installation/), then downloads
+   Python, the locked dependencies and a verified 9.4 MB pose model. Initial setup
+   needs an internet connection; normal local monitoring does not.
+3. **Choose your camera.** Setup asks before turning it on. Allow camera access
+   if macOS prompts. Preview a camera, press a key to close its preview, then
+   choose front or side. A second camera is optional. Previews are never saved.
+4. **Set your baseline.** Sit comfortably and hold still for ten seconds. Stack
+   saves numeric measurements. If it cannot see enough, it explains how to retry.
+5. **Double-click `Open Stack.command`.** Keep that Terminal window open. Find
+   **▤** in your Mac's top menu bar, choose **Check Now**, then **Start Monitoring**.
+   Stack opens Idle so monitoring starts when you choose it.
+
+If macOS blocks the downloaded launcher, use [Apple's instructions for approving
+downloaded software](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
+You do not need to disable your Mac's security settings.
+
+**No camera found?** Allow your Terminal/Python launcher in System Settings →
+Privacy & Security → Camera, close other apps using that camera, and choose Retry.
+[Apple's camera-permission guide](https://support.apple.com/guide/mac-help/control-access-to-the-camera-mchlf6d108da/mac)
+explains that setting. Hardware and permission behavior can vary.
+
+**Later:** use `Open Stack.command` to reopen it. To change your camera or
+baseline, choose Quit in Stack's menu, then double-click `Recalibrate Stack.command`.
+Run setup again after updating to a new release. Keep existing settings when asked.
+
+## What stays on your Mac
+
+By default, camera frames are processed in memory and discarded. Stack does not
+read a Gemini API key or upload images unless you explicitly enable Gemini.
+Setup and calibration never use Gemini, even if you have enabled it for monitoring.
+
+Your settings, numeric baseline, history, logs and generated dashboard live in
+`~/.posture_monitor/`. In Finder, choose Go → Go to Folder and paste that path to
+find them. The established folder name is retained for existing users. These files
+can be personal, so review them before sharing. The public demo contains none of them.
+
+Advanced exceptions: `store_calibration_frames = true` enables a local frame
+store during monitoring. The legacy `scripts/identify_cameras.py` explicitly
+writes full-frame previews; the guided setup above does not. Keep those options
+separate from ordinary setup, and do not commit their output.
+
+## Optional Gemini coaching
+
+Everything above works without an account or API key. Enabling Gemini sends a
+cropped, downscaled image of the person to Google's API. The crop can still show
+things directly behind you. Google service terms apply, and API calls may cost
+money. Gemini adds text and comparison statistics; it does not decide local
+scores or nudges.
+
+If you choose to enable it, open Terminal in the Stack folder and run:
 
 ```bash
-git clone https://github.com/jessecmaddox3/stack-posture.git
-cd stack-posture
-uv sync --extra dev --locked
-uv run python scripts/demo.py
+.venv/bin/python scripts/set_gemini_key.py
 ```
 
-The demo scores synthetic measurements only. It does not access a camera,
-Keychain, filesystem state, Gemini, or the network.
-
-## Install and run the app
-
-1. Fetch the MediaPipe pose model. It is downloaded separately and is not in
-   the repository.
-
-   ```bash
-   ./scripts/fetch_model.sh
-   ```
-
-2. Run camera discovery, then delete its full-frame previews after recording
-   the camera indexes.
-
-   ```bash
-   uv run python scripts/identify_cameras.py
-   ```
-
-3. Create `~/.posture_monitor/config.toml` with the cameras you want to use:
-
-   ```toml
-   [cameras]
-   front = 0
-   # side = 1
-   ```
-
-4. Start Stack manually and grant macOS camera permission when prompted:
-
-   ```bash
-   ./run.sh
-   ```
-
-5. Use the menu-bar app to calibrate. Calibration stores numeric measurements,
-   not normal monitoring frames. A side camera is needed to measure forward
-   head posture and trunk lean.
-
-Stack stores its baseline, history, logs, configuration, and on-demand
-dashboard under `~/.posture_monitor/`. The package and data path deliberately
-retain this established name for compatibility with existing installations.
-
-## Privacy and optional Gemini
-
-Normal monitoring and calibration process frames in memory and do not save
-them. `identify_cameras.py` is the exception: it intentionally writes uncropped
-camera previews to `~/.posture_monitor/camera_previews/` for manual camera
-identification. Delete that directory after setup.
-
-Gemini is disabled unless you explicitly set `gemini_enabled = true` in
-`~/.posture_monitor/config.toml`. With it enabled, Stack crops and downscales a
-person region in memory before sending it to Gemini. The crop removes much of
-the room beside the person but can still include anything directly behind them.
-Treat enabled Gemini as uploading a narrow, full-height desk image. The local
-monitor, nudge, and dashboard work without Gemini.
-
-To opt in, add these top-level keys before the `[cameras]` section:
+The prompt hides your key and stores it in macOS Keychain. It does not enable
+uploads. Add these **top-level** settings before `[cameras]` in your local
+`~/.posture_monitor/config.toml`, then restart Stack:
 
 ```toml
 gemini_enabled = true
 comparison_sample_rate = 0.15
 max_coaching_calls_per_day = 12
-
-[cameras]
-front = 0
 ```
 
-Store an API key in macOS Keychain, or set `POSTURE_GEMINI_API_KEY` only in your
-local environment. Do not commit keys, frames, database files, or configuration.
-The settings cap coaching calls and the comparison sample rate. See the source
-comments in `src/posture/config.py` before changing them.
+The comparison rate samples about 15% of recording windows; it is separate from
+the coaching limit of 12 calls per day. Set either to zero to disable that path.
+Set `gemini_enabled = false` to stop all Gemini calls. Use real TOML booleans,
+without quotation marks. A locally set `POSTURE_GEMINI_API_KEY` environment variable
+is an alternative to Keychain. Never put a key in this repository.
 
-## Limits
+## Login launch, stopping and removal
 
-- Stack currently supports macOS only. It has not been tested on Windows or
-  Linux, and its menu bar and Keychain integrations are macOS-specific.
-- Camera compatibility, multi-camera behavior, popup placement, and focus
-  behavior need real-hardware validation. The test suite uses synthetic frames
-  and deliberately does not open a camera.
-- Front-camera measurements cannot infer forward head posture or trunk lean.
-  Those require a stable side view.
-- Moving a camera changes measurements. Recalibrate after materially changing
-  its position.
-- Gemini wording and model availability can change. It does not drive local
-  ratings, trend data, or nudges.
-
-## Development and releases
+To stop monitoring, use Stop Monitoring or Quit in the menu. To open Stack at
+login, first get a successful Check Now reading, quit Stack, then run this from
+its folder in Terminal:
 
 ```bash
-uv sync --all-groups
-uv run python -m pytest -q
+./scripts/install_autostart.sh
+```
+
+This opens Stack **Idle**, not automatically monitoring. Verify Check Now after
+login because macOS can treat background camera permission differently. Keep the
+Stack folder in place. To remove login launch:
+
+```bash
+./scripts/uninstall_autostart.sh
+```
+
+After quitting and removing login launch, you can delete the Stack folder. Your
+history remains in `~/.posture_monitor/` until you separately choose to delete it.
+
+## How I designed it
+
+Local MediaPipe landmarks feed geometric measurements, compared with a versioned
+baseline. Sustained changes and cooldowns keep reminders from reacting to every
+movement. SQLite stores numeric checks and the baseline used for each one. The
+dashboard avoids treating different camera setups or recalibrations as one
+continuous, directly comparable score.
+
+Front view can measure alignment, but cannot see forward head position or trunk
+lean. Those require a stable side view. Move a camera and you should recalibrate.
+Measurements depend on framing and visibility; missing measurements stay missing.
+The optional model comparison is separately sampled, so it is not selected only
+from checks the local system already considers poor.
+
+## Developers and contributors
+
+Use an Apple Silicon Mac on macOS 13+ with [uv](https://docs.astral.sh/uv/):
+
+```bash
+git clone https://github.com/jessecmaddox3/stack-posture.git
+cd stack-posture
+uv sync --extra dev --locked
+uv run python -m posture.demo
+uv run python -m pytest -q tests
 uv run ruff check src tests scripts
 uv build
 ```
 
-The GitHub Actions workflow runs these checks on macOS and installs the built
-wheel in a clean temporary environment before executing the offline demo.
-`CONTRIBUTING.md` explains the synthetic-data policy and useful starter work.
+The default tests use synthetic inputs and block camera, network, Keychain and
+personal-state access. Native pose inference is a separate opt-in check with an
+explicit test-only model path, described in [CONTRIBUTING.md](CONTRIBUTING.md).
+Automated tests do not establish real camera compatibility, popup placement or
+macOS login behavior on every device.
 
-The code is available under the [MIT License](LICENSE). See [NOTICE.md](NOTICE.md)
-for dependency, model, dashboard asset, and optional Gemini notices. To report
-a vulnerability privately, follow [SECURITY.md](SECURITY.md).
+Have an improvement? Read [CONTRIBUTING.md](CONTRIBUTING.md). This project's code is
+[MIT licensed](LICENSE): use it, change it, share it, including commercially,
+while keeping the license notice. [NOTICE.md](NOTICE.md) covers third-party
+components. [SECURITY.md](SECURITY.md) explains private vulnerability reporting.

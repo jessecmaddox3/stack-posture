@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record a posture baseline.
 
-Usage:  uv run python scripts/calibrate.py "post-op week 3"
+Usage:  uv run python scripts/calibrate.py "new desk position"
 
 Sit the way your physical therapist wants you to sit, then hold still for ten
 seconds. Nothing is uploaded and no image is written.
@@ -66,4 +66,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from posture.instance import instance_lock
+    with instance_lock():
+        raise SystemExit(main())

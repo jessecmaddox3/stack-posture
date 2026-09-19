@@ -67,7 +67,7 @@ def decide(
     defaulted on purpose: a new call site that forgot them would silently
     reinstate the unbounded gated path this budget exists to close.
     """
-    if not gemini_enabled:
+    if gemini_enabled is not True:
         return GateDecision(False, False, "gemini disabled")
     if circuit_open:
         return GateDecision(False, False, "circuit breaker open")

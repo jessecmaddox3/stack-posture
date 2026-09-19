@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import Foundation
 import pytest
+from unittest.mock import MagicMock
 
 from posture.ui import popup
 
@@ -45,6 +46,13 @@ def test_a_failed_timer_still_leaves_the_panel_dismissable(monkeypatch):
             raise RuntimeError("timer scheduling failed")
 
     monkeypatch.setattr(Foundation, "NSTimer", RaisingNSTimer)
+    # Exercise panel ownership and cleanup without a real display or visible UI.
+    appkit = MagicMock()
+    appkit.NSStackView.alloc().init().fittingSize.return_value.height = 140.0
+    monkeypatch.setattr(popup, "AppKit", appkit)
+    screen = MagicMock()
+    screen.visibleFrame.return_value = Foundation.NSMakeRect(0, 0, 1200, 800)
+    monkeypatch.setattr(popup, "_target_screen", lambda: screen)
 
     # The failure path falls back to notify(), which really does post a macOS
     # notification via osascript. Left unpatched, every run of this suite buzzed
@@ -70,3 +78,4 @@ def test_a_failed_timer_still_leaves_the_panel_dismissable(monkeypatch):
     # next call, which is what the next nudge's show_popup does first.
     popup._dismiss()
     assert popup._active == {}
+    panel.orderOut_.assert_called_once_with(None)

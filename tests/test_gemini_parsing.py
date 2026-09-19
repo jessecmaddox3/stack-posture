@@ -152,15 +152,24 @@ def test_trip_permanently_ignores_the_cooldown():
 def make_client(monkeypatch):
     monkeypatch.setattr("posture.gemini.get_api_key", lambda: "test-key")
     with patch("posture.gemini.genai.Client"):
-        return GeminiClient(Config(gemini_model="gemini-3.5-flash-lite"))
+        return GeminiClient(Config(gemini_enabled=True, gemini_model="gemini-3.5-flash-lite"))
 
 
 def test_missing_api_key_yields_api_error(monkeypatch):
     monkeypatch.setattr("posture.gemini.get_api_key", lambda: None)
-    client = GeminiClient(Config())
+    client = GeminiClient(Config(gemini_enabled=True))
     verdict, outcome = client.assess({})
     assert verdict is None
     assert outcome is Outcome.API_ERROR
+
+
+@pytest.mark.parametrize("enabled", [False, "false", "true", 1])
+def test_client_never_reads_keys_without_explicit_boolean_opt_in(monkeypatch, enabled):
+    key_reader = MagicMock(side_effect=AssertionError("Keychain must stay untouched"))
+    monkeypatch.setattr("posture.gemini.get_api_key", key_reader)
+    client = GeminiClient(Config(gemini_enabled=enabled))
+    assert client.available is False
+    key_reader.assert_not_called()
 
 
 def test_404_maps_to_model_unavailable_and_trips_permanently(monkeypatch):

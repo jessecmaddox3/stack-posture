@@ -525,7 +525,8 @@ def test_the_diagnostics_worker_is_tracked_so_stop_waits_for_it(conn):
         may_finish.wait(5.0)
         return ()
 
-    with patch("posture.cameras.discover", slow_discover):
+    with (patch("posture.cameras.discover", slow_discover),
+          patch("posture.diagnostics.read_log_tail", return_value="synthetic log")):
         monitor.run_diagnostics_async(MagicMock())
         assert started.wait(5.0)
         with monitor._workers_lock:

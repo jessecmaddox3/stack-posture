@@ -1,0 +1,16 @@
+# Copy only settings you want to change to ~/.posture_monitor/config.toml.
+# Put these top-level settings BEFORE the [cameras] table.
+gemini_enabled = false
+store_calibration_frames = false
+sample_interval_s = 30
+record_interval_s = 120
+sustained_samples = 3
+nudge_cooldown_s = 600
+
+# Optional Gemini paths, both controlled by the master switch above.
+comparison_sample_rate = 0.15
+max_coaching_calls_per_day = 12
+
+[cameras]
+front = 0
+# side = 1  # optional, must be a different device

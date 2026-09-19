@@ -118,7 +118,7 @@ class PostureApp(rumps.App):
             config=config, detector=self.detector, conn=self.conn,
             on_nudge=self._on_nudge, on_status=self._on_status,
         )
-        self.gemini = GeminiClient(config) if config.gemini_enabled else None
+        self.gemini = GeminiClient(config) if config.gemini_enabled is True else None
         self.monitor.gemini = self.gemini
         if self.gemini is not None:
             self.gemini_item.title = "Gemini: checking..."
@@ -443,4 +443,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    from posture.instance import instance_lock
+    try:
+        with instance_lock():
+            main()
+    except RuntimeError as exc:
+        print(exc)

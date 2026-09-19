@@ -1,6 +1,7 @@
 """Configuration. Defaults in code, overridden by TOML, never holding secrets."""
 from __future__ import annotations
 
+import math
 import tomllib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -75,6 +76,40 @@ class Config:
     db_path: Path = DATA_DIR / "history.db"
     log_path: Path = DATA_DIR / "posture_monitor.log"
 
+    def validate(self) -> None:
+        """Reject ambiguous consent and invalid limits before opening any device/service."""
+        for key in ("gemini_enabled", "gemini_blind", "store_calibration_frames"):
+            if type(getattr(self, key)) is not bool:
+                raise ValueError(f"{key} must be true or false, without quotes")
+        for key in ("sample_interval_s", "record_interval_s", "nudge_cooldown_s",
+                    "min_seconds_between_api_calls", "api_timeout_s",
+                    "circuit_breaker_cooldown_s", "comparison_sample_rate"):
+            value = getattr(self, key)
+            if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                raise ValueError(f"{key} must be a finite nonnegative number")
+            if key in ("sample_interval_s", "api_timeout_s") and value == 0:
+                raise ValueError(f"{key} must be greater than zero")
+        if self.comparison_sample_rate > 1:
+            raise ValueError("comparison_sample_rate must be between 0 and 1")
+        for key in ("sustained_samples", "max_coaching_calls_per_day",
+                    "capture_warmup_frames", "circuit_breaker_threshold"):
+            minimum = 1 if key in ("sustained_samples", "circuit_breaker_threshold") else 0
+            value = getattr(self, key)
+            if type(value) is not int or value < minimum:
+                raise ValueError(f"{key} must be a whole number at least {minimum}")
+        if not isinstance(self.gemini_model, str) or not self.gemini_model.strip():
+            raise ValueError("gemini_model must be a nonempty model name")
+        roles = self.camera_indices
+        if not isinstance(roles, dict) or not roles:
+            raise ValueError("cameras must contain at least one front or side camera")
+        unknown = set(roles) - set(VALID_CAMERA_ROLES)
+        if unknown:
+            raise ValueError(f"unknown camera role(s): {sorted(unknown)}")
+        if any(type(index) is not int or index < 0 for index in roles.values()):
+            raise ValueError("camera indices must be nonnegative whole numbers")
+        if len(set(roles.values())) != len(roles):
+            raise ValueError("two camera roles share the same index")
+
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
         path = path or CONFIG_PATH
@@ -87,18 +122,11 @@ class Config:
         updates = {k: v for k, v in raw.items() if k in known}
         for key in ("model_path", "db_path", "log_path"):
             if key in updates:
+                if not isinstance(updates[key], str) or not updates[key].strip():
+                    raise ValueError(f"{key} must be a nonempty path string")
                 updates[key] = Path(updates[key]).expanduser()
-        if cameras:
-            roles = {str(k): int(v) for k, v in cameras.items()}
-            unknown = set(roles) - set(VALID_CAMERA_ROLES)
-            if unknown:
-                raise ValueError(
-                    f"unknown camera role(s): {sorted(unknown)}. "
-                    f"Valid roles are {list(VALID_CAMERA_ROLES)}. Anything not "
-                    f"named 'front' is treated as a side view, so a typo would "
-                    f"produce forward head and trunk readings from a front camera."
-                )
-            if len(set(roles.values())) != len(roles):
-                raise ValueError("two camera roles share the same index")
-            updates["camera_indices"] = roles
-        return replace(cfg, **updates)
+        if cameras is not None:
+            updates["camera_indices"] = cameras
+        cfg = replace(cfg, **updates)
+        cfg.validate()
+        return cfg

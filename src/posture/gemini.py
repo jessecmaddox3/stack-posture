@@ -181,7 +181,7 @@ class GeminiClient:
         self.config = config
         self.breaker = CircuitBreaker(config.circuit_breaker_threshold,
                                       config.circuit_breaker_cooldown_s)
-        key = get_api_key()
+        key = get_api_key() if config.gemini_enabled is True else None
         self._client = genai.Client(api_key=key) if key else None
 
     @property

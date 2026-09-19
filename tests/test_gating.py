@@ -54,6 +54,11 @@ def test_disabled_gemini_never_calls():
     assert d(Rating.POOR, sampled=True, enabled=False).should_call is False
 
 
+def test_truthy_nonboolean_values_cannot_enable_uploads():
+    for value in ("false", "true", 1, [], {"enabled": True}):
+        assert d(Rating.POOR, sampled=True, enabled=value).should_call is False
+
+
 def test_open_circuit_never_calls():
     assert d(Rating.POOR, sampled=True, open_=True).should_call is False
 

@@ -5,7 +5,7 @@
 
 ## Development setup
 
-Stack supports macOS with Python 3.12. Install [uv](https://docs.astral.sh/uv/),
+Stack supports Apple Silicon macOS 13+ with Python 3.12. Install [uv](https://docs.astral.sh/uv/),
 then run:
 
 ```bash
@@ -17,6 +17,14 @@ uv run ruff check src tests scripts
 Tests must not access a real camera, Keychain, Gemini account, or live network.
 Use mocks and synthetic landmarks or frames instead. Do not add captured desk
 photos, API keys, databases, generated dashboards, or configuration files.
+
+The committed dashboard demo is generated only from `posture.demo`'s invented
+measurements. Rebuild it with `uv run python -m posture.demo --dashboard docs/Stack-Demo.html`.
+To explicitly test native inference, download the pinned model into a temporary
+test-only directory and run `pytest tests/test_landmarks.py --native-model-path /path/to/test-model.task`.
+These two opt-in tests use blank synthetic frames. They never discover a model
+or photograph in the user's personal-state folder. Keep this integration separate
+from the default camera-free suite, especially in headless environments.
 
 ## Pull requests
 

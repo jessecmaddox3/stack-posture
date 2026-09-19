@@ -16,10 +16,11 @@ jobs:
       - run: uv run python -m pytest -q
       - run: uv run python -m ruff check src tests scripts
       - run: uv build
+      - run: uv run python scripts/build_release.py
       - name: Verify wheel outside checkout
         run: |
           temp_dir="$(mktemp -d)"
           uv venv "$temp_dir/venv" --python 3.12
           uv pip install --python "$temp_dir/venv/bin/python" dist/*.whl
           cd "$temp_dir"
-          "$temp_dir/venv/bin/python" "$GITHUB_WORKSPACE/scripts/demo.py"
+          "$temp_dir/venv/bin/python" -m posture.demo --dashboard demo.html

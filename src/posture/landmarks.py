@@ -18,10 +18,6 @@ from posture.types import Landmarks, Point
 
 logger = logging.getLogger("posture")
 
-MODEL_URL = (
-    "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
-    "pose_landmarker_full/float16/latest/pose_landmarker_full.task"
-)
 MIN_BOX_VISIBILITY = 0.5
 
 

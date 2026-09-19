@@ -3,47 +3,28 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from posture.config import Config
 from posture.landmarks import PoseDetector
 from posture.types import Landmarks, Point
 
-MODEL = Config().model_path
-needs_model = pytest.mark.skipif(not MODEL.exists(),
-                                 reason="run scripts/fetch_model.sh first")
-
-
-@needs_model
-def test_blank_frame_yields_no_person():
-    with PoseDetector(MODEL) as detector:
+@pytest.mark.native_model
+def test_blank_frame_yields_no_person(native_model_path):
+    with PoseDetector(native_model_path) as detector:
         blank = np.zeros((720, 1280, 3), dtype=np.uint8)
         assert detector.detect(blank) is None
 
 
-@needs_model
-def test_detector_is_reusable_across_calls():
-    with PoseDetector(MODEL) as detector:
+@pytest.mark.native_model
+def test_detector_is_reusable_across_calls(native_model_path):
+    with PoseDetector(native_model_path) as detector:
         blank = np.zeros((720, 1280, 3), dtype=np.uint8)
         assert detector.detect(blank) is None
         assert detector.detect(blank) is None
-
-
-@needs_model
-def test_detect_returns_33_landmarks_on_a_real_photo():
-    import cv2
-    photo = MODEL.parent.parent / "tests_fixture_seated.jpg"
-    if not photo.exists():
-        pytest.skip("no fixture photo yet; added in Task 12")
-    frame = cv2.imread(str(photo))
-    with PoseDetector(MODEL) as detector:
-        lm = detector.detect(frame)
-    assert lm is not None
-    assert len(lm.points) == 33
 
 
 def test_detect_returns_none_when_no_pose_is_found(tmp_path):
     """Cover the None-vs-person branch WITHOUT needing the 9.4MB model.
 
-    Every other detect() test is gated behind @needs_model, so in a fresh clone or
+    Native detect() tests require an explicit test-only model path, so in a fresh clone or
     on CI they all skip and this branch has no coverage at all. Mutation testing
     confirmed that returning an empty Landmarks instead of None would go
     undetected in that environment. A real file satisfies the existence check; the
